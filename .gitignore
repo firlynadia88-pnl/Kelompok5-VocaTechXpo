@@ -46,3 +46,9 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+notepad .gitignore
+
+.env
+.env.*
+!.env.example
