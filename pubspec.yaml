@@ -25,5 +25,4 @@ flutter:
 
   assets:
     - .env
-    - assets/images/voca_logo.png
-    - assets/images/voca_logo_transparan.png
+    - assets/images/
