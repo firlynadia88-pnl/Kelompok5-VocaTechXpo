@@ -46,3 +46,17 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Flutter generated files
+.dart_tool/
+.build/
+build/
+
+# IDE
+.idea/
+*.iml

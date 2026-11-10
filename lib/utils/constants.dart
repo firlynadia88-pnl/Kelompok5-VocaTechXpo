@@ -1,0 +1,17 @@
+final List<String> globalUkmList = [
+  'UKM IECLOP (Improving English Club of Polytechnic)',
+  'UKM LDK-FORDIMA',
+  'UKM POLICY (Polytechnic Linux Community)',
+  'UKM Sanggar Seni',
+  'UKM Edelweis',
+  'UKM Taekwondo',
+  'UKM Polyrobocom',
+  'UKM Merpati Putih',
+  'BEM',
+  'HIMATIK',
+  'HIMABIS',
+  'HIMA ELEKTRO',
+  'HIMA MESIN',
+  'HIMA SIPIL',
+  'Wirausaha Mahasiswa Mandiri (UMKM)',
+];

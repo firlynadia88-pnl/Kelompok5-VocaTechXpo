@@ -1,20 +1,24 @@
-
 name: flutter_voca_techxpo
-description: "A new Flutter project."
+description: Aplikasi Voca TechXpo
 publish_to: 'none'
 
-version: 1.0.0+1
-
 environment:
-  sdk: ^3.13.2
+  sdk: '>=3.13.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
+
   cupertino_icons: ^1.0.8
   http: ^1.6.0
   supabase_flutter: ^2.8.0
   flutter_dotenv: ^5.2.1
+  file_picker: ^13.3.0
+  geolocator: ^14.0.1
+  geocoding: ^5.0.1
+  google_maps_flutter: ^2.19.0
+  cached_network_image: ^3.4.1
+  latlong2: ^0.10.1
 
 dev_dependencies:
   flutter_test:
@@ -24,6 +28,7 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
+  # Pendaftaran aset agar .env dan gambar tidak error 404 saat di-load di Flutter Web/App
   assets:
     - .env
     - assets/images/
