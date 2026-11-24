@@ -3,6 +3,10 @@ import 'dart:ui';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'services/chat_service.dart';
+import 'models/chat_message.dart';
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -25,7 +29,13 @@ final List<String> globalUkmList = [
   'UKM Taekwondo',
   'UKM Polyrobocom',
   'UKM Merpati Putih',
-  'Wirausaha Mahasiswa Mandiri (UMKM)'
+  'BEM',
+  'HIMATIK',
+  'HIMABIS',
+  'HIMA ELEKTRO',
+  'HIMA MESIN',
+  'HIMA SIPIL',
+  'Wirausaha Mahasiswa Mandiri (UMKM)',
 ];
 
 class MyApp extends StatelessWidget {
@@ -2072,9 +2082,19 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
       case 1:
         return _buildProfileContent(context);
       case 2:
-        return SharedMessagesScreen(isOrganizer: false, onBack: () { setState(() => _currentIndex = 0); });
+        return ChatRoomsScreen(
+          isOrganizer: false,
+          onBack: () {
+            setState(() => _currentIndex = 0);
+          },
+        );
       case 3:
-        return SharedMessagesScreen(isOrganizer: false, onBack: () { setState(() => _currentIndex = 0); });
+        return ChatRoomsScreen(
+          isOrganizer: false,
+          onBack: () {
+            setState(() => _currentIndex = 0);
+          },
+        );
       default:
         return _buildHomeContent(MediaQuery.sizeOf(context).width > 900);
     }
@@ -4457,9 +4477,19 @@ class _OrganizerDashboardScreenState extends State<OrganizerDashboardScreen> {
           icon: Icons.star_border_rounded,
         );
       case 5:
-        return SharedMessagesScreen(isOrganizer: true, onBack: () { setState(() => _selectedIndex = 0); });
+        return ChatRoomsScreen(
+          isOrganizer: true,
+          onBack: () {
+            setState(() => _selectedIndex = 0);
+          },
+        );
       case 6:
-        return SharedMessagesScreen(isOrganizer: true, onBack: () { setState(() => _selectedIndex = 0); });
+        return ChatRoomsScreen(
+          isOrganizer: true,
+          onBack: () {
+            setState(() => _selectedIndex = 0);
+          },
+        );
       case 7:
         return _buildOrganizerProfile();
       default:
@@ -5793,92 +5823,293 @@ class StarrySkyPainter extends CustomPainter {
 // UI percakapan terpadu. Data contoh disimpan di memori aplikasi saat ini.
 // Untuk sinkronisasi lintas perangkat dan AI sungguhan, hubungkan ke tabel
 // Supabase conversations/messages serta Edge Function AI (lihat instruksi setelah kode).
-class SharedMessagesScreen extends StatefulWidget {
+
+
+// ==================== PESAN TERPADU CLIENT & ORGANIZER ====================
+
+// 1. HALAMAN DAFTAR ROOM (CLIENT: PILIH UKM | ORGANIZER: INBOX PESAN MASUK)
+class ChatRoomsScreen extends StatefulWidget {
   final bool isOrganizer;
   final VoidCallback? onBack;
-  const SharedMessagesScreen({super.key, required this.isOrganizer, this.onBack});
+
+  const ChatRoomsScreen({
+    super.key,
+    required this.isOrganizer,
+    this.onBack,
+  });
 
   @override
-  State<SharedMessagesScreen> createState() => _SharedMessagesScreenState();
+  State<ChatRoomsScreen> createState() => _ChatRoomsScreenState();
 }
 
-class _SharedMessagesScreenState extends State<SharedMessagesScreen> {
+class _ChatRoomsScreenState extends State<ChatRoomsScreen> {
   static const Color _purple = Color(0xFF581C87);
   static const Color _accent = Color(0xFF8B5CF6);
-  static final List<_VocaChatMessage> _sharedHistory = [
-    _VocaChatMessage(
-      text: 'Halo! 👋 Saya asisten Voca-TechXpo. Saya bisa membantu menjawab pertanyaan awal tentang event, booth, dan produk. Jika perlu konfirmasi langsung, kamu bisa menghubungi organizer.',
-      sender: 'ai',
-      time: DateTime.now(),
-    ),
+
+  static const List<String> _ukmList = [
+    'UKM Edelweis',
+    'UKM Taekwondo',
+    'UKM Polyrobocom',
+    'UKM Merpati Putih',
+    'BEM',
+    'HIMATIK',
+    'HIMABIS',
+    'HIMA ELEKTRO',
+    'HIMA MESIN',
+    'HIMA SIPIL',
+    'Wirausaha Mahasiswa Mandiri (UMKM)',
+    'UKM IECLOP (Improving English Club of Polytechnic)',
+    'UKM LDK-FORDIMA',
+    'UKM POLICY (Polytechnic Linux Community)',
+    'UKM Sanggar Seni',
   ];
 
-  final TextEditingController _messageController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
-  bool _organizerRequested = false;
-  bool _satisfied = false;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  String _selectedFilter = 'Semua';
 
   @override
   void dispose() {
-    _messageController.dispose();
-    _scrollController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
-  void _sendMessage() {
-    final text = _messageController.text.trim();
-    if (text.isEmpty) return;
-    setState(() {
-      _sharedHistory.add(_VocaChatMessage(
-        text: text,
-        sender: widget.isOrganizer ? 'organizer' : 'user',
-        time: DateTime.now(),
-      ));
-      _messageController.clear();
-      if (!widget.isOrganizer) {
-        _sharedHistory.add(_VocaChatMessage(
-          text: _organizerRequested
-              ? 'Pesanmu sudah masuk ke percakapan ini. Organizer dapat membalas di sini saat tersedia. Untuk harga, stok, pembayaran, dan konfirmasi pesanan, tunggu konfirmasi resmi dari organizer ya.'
-              : _localAnswer(text),
-          sender: 'ai',
-          time: DateTime.now(),
-        ));
-      }
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOut,
+  Future<void> _showSelectUkmDialog() async {
+    String? selectedUkm;
+    bool isOpening = false;
+    String? errorMessage;
+
+    final roomResult = await showDialog<Map<String, dynamic>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setModalState) {
+            return Dialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440, maxHeight: 540),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.tune_rounded, color: _purple, size: 20),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Text(
+                              'Pilih UKM...',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF21163F),
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: isOpening ? null : () => Navigator.pop(dialogContext),
+                            icon: const Icon(Icons.close_rounded, color: Color(0xFF777493), size: 20),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1, color: Color(0xFFF0ECF7)),
+                    if (errorMessage != null)
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF2F2),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFFECACA)),
+                        ),
+                        child: Text(
+                          errorMessage!,
+                          style: const TextStyle(color: Color(0xFFB91C1C), fontSize: 12),
+                        ),
+                      ),
+                    Flexible(
+                      child: isOpening
+                          ? const Padding(
+                              padding: EdgeInsets.all(40),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  CircularProgressIndicator(color: _purple),
+                                  SizedBox(height: 14),
+                                  Text(
+                                    'Membuka ruang obrolan UKM...',
+                                    style: TextStyle(fontSize: 13, color: Color(0xFF777493)),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              itemCount: _ukmList.length,
+                              separatorBuilder: (_, __) => const Divider(
+                                height: 1,
+                                indent: 20,
+                                endIndent: 20,
+                                color: Color(0xFFF8FAFC),
+                              ),
+                              itemBuilder: (context, index) {
+                                final ukmName = _ukmList[index];
+                                final isSelected = selectedUkm == ukmName;
+
+                                return InkWell(
+                                  onTap: () async {
+                                    setModalState(() {
+                                      selectedUkm = ukmName;
+                                      isOpening = true;
+                                      errorMessage = null;
+                                    });
+
+                                    try {
+                                      final user = Supabase.instance.client.auth.currentUser;
+                                      final meta = user?.userMetadata ?? {};
+                                      final clientName = (meta['username'] ??
+                                              meta['full_name'] ??
+                                              user?.email?.split('@').first ??
+                                              'Mahasiswa')
+                                          .toString();
+
+                                      Map<String, dynamic>? existingRoom;
+                                      if (user != null) {
+                                        existingRoom = await Supabase.instance.client
+                                            .from('conversations')
+                                            .select()
+                                            .eq('client_id', user.id)
+                                            .eq('topic', ukmName)
+                                            .maybeSingle();
+                                      }
+
+                                      if (existingRoom != null) {
+                                        if (dialogContext.mounted) {
+                                          Navigator.pop(dialogContext, existingRoom);
+                                        }
+                                        return;
+                                      }
+
+                                      final inserted = await Supabase.instance.client
+                                          .from('conversations')
+                                          .insert({
+                                            'user_id': user?.id,
+                                            'client_id': user?.id,
+                                            'client_name': clientName,
+                                            'topic': ukmName,
+                                            'last_message': 'Memulai percakapan dengan $ukmName',
+                                            'last_message_at': DateTime.now().toIso8601String(),
+                                            'status': 'bot',
+                                            'unread_count': 0,
+                                          })
+                                          .select()
+                                          .single();
+
+                                      if (dialogContext.mounted) {
+                                        Navigator.pop(dialogContext, inserted);
+                                      }
+                                    } catch (e) {
+                                      setModalState(() {
+                                        isOpening = false;
+                                        errorMessage = 'Gagal membuka room: $e';
+                                      });
+                                    }
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          isSelected
+                                              ? Icons.radio_button_checked_rounded
+                                              : Icons.radio_button_unchecked_rounded,
+                                          size: 20,
+                                          color: isSelected ? _purple : const Color(0xFF9CA3AF),
+                                        ),
+                                        const SizedBox(width: 14),
+                                        Expanded(
+                                          child: Text(
+                                            ukmName,
+                                            style: TextStyle(
+                                              fontSize: 13.5,
+                                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                              color: isSelected ? _purple : const Color(0xFF21163F),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
-      }
-    });
+      },
+    );
+
+    if (roomResult != null && mounted) {
+      _openChatRoom(roomResult);
+    }
   }
 
-  String _localAnswer(String question) {
-    final q = question.toLowerCase();
-    if (q.contains('harga') || q.contains('biaya')) {
-      return 'Informasi harga dapat berbeda untuk setiap booth atau produk. Saya belum memiliki data harga spesifik di percakapan ini. Tekan “Chat Organizer” agar pengelola memberikan konfirmasi resmi.';
+  void _openChatRoom(Map<String, dynamic> room) {
+    if (widget.isOrganizer && (room['unread_count'] ?? 0) > 0) {
+      Supabase.instance.client
+          .from('conversations')
+          .update({'unread_count': 0})
+          .eq('id', room['id']);
     }
-    if (q.contains('bayar') || q.contains('pembayaran') || q.contains('transfer')) {
-      return 'Untuk keamanan, ikuti metode pembayaran yang tersedia di halaman pemesanan aplikasi. Status pembayaran dan konfirmasi pesanan harus diverifikasi melalui sistem atau organizer.';
-    }
-    if (q.contains('booth') || q.contains('event') || q.contains('acara')) {
-      return 'Kamu bisa membuka detail event atau booth untuk melihat informasi yang tersedia. Jika informasi lokasi, jadwal, fasilitas, atau ketersediaan belum tercantum, hubungi organizer melalui tombol di bawah.';
-    }
-    return 'Terima kasih atas pertanyaannya! Saya belum memiliki informasi spesifik yang cukup untuk memastikan jawaban tersebut. Kamu bisa menekan “Chat Organizer” agar pengelola menindaklanjuti dalam percakapan yang sama.';
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          body: SafeArea(
+            child: SharedMessagesScreen(
+              isOrganizer: widget.isOrganizer,
+              conversationId: room['id'].toString(),
+              roomTitle: widget.isOrganizer
+                  ? '${room['client_name'] ?? 'Pengunjung'} • ${room['topic'] ?? 'UKM'}'
+                  : (room['topic'] ?? 'Voca-TechXpo Support').toString(),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
-  String _formatTime(DateTime time) =>
-      '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  String _formatRoomTime(String? isoString) {
+    if (isoString == null) return '';
+    final dt = DateTime.tryParse(isoString)?.toLocal();
+    if (dt == null) return '';
+    final now = DateTime.now();
+    if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
+      return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    }
+    return '${dt.day}/${dt.month}';
+  }
 
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.sizeOf(context).width > 760;
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+
     return Container(
       color: const Color(0xFFF8FAFC),
-      padding: EdgeInsets.all(isDesktop ? 24 : 12),
+      padding: EdgeInsets.all(isDesktop ? 24 : 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -5915,134 +6146,979 @@ class _SharedMessagesScreenState extends State<SharedMessagesScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(widget.isOrganizer ? 'Pesan Masuk' : 'Pesan',
-                      style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900, color: Color(0xFF21163F))),
+                    Text(
+                      widget.isOrganizer ? 'Inbox Pesan Masuk' : 'Ruang Percakapan',
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF21163F)),
+                    ),
                     const SizedBox(height: 3),
-                    Text(widget.isOrganizer
-                      ? 'Balas percakapan pengunjung dan lanjutkan riwayat chat yang sama.'
-                      : 'Satu ruang percakapan untuk bantuan AI dan komunikasi dengan organizer.',
-                      style: const TextStyle(fontSize: 12, color: Color(0xFF777493))),
+                    Text(
+                      widget.isOrganizer
+                          ? 'Balas pesan masuk dari pengunjung dan cek bukti transfer per UKM.'
+                          : 'Pilih riwayat chat UKM atau klik "Pilih UKM" untuk memulai obrolan.',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF777493)),
+                    ),
                   ],
                 ),
               ),
-              if (widget.isOrganizer)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                  decoration: BoxDecoration(color: const Color(0xFFEDE9FE), borderRadius: BorderRadius.circular(20)),
-                  child: const Text('Inbox', style: TextStyle(color: _purple, fontWeight: FontWeight.w800, fontSize: 11)),
+              if (!widget.isOrganizer)
+                FilledButton.icon(
+                  onPressed: _showSelectUkmDialog,
+                  icon: const Icon(Icons.tune_rounded, size: 18),
+                  label: const Text('Pilih UKM', style: TextStyle(fontWeight: FontWeight.w700)),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _purple,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
                 ),
             ],
           ),
           const SizedBox(height: 18),
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFFEAE4F8))),
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-                    decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFF0ECF7)))),
-                    child: Row(children: [
-                      const CircleAvatar(backgroundColor: Color(0xFFF0E9FF), child: Icon(Icons.support_agent_rounded, color: _purple)),
-                      const SizedBox(width: 10),
-                      const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text('Voca-TechXpo Support', style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF21163F))),
-                        SizedBox(height: 3), Text('AI Assistant • Organizer', style: TextStyle(fontSize: 11, color: Color(0xFF777493))),
-                      ])),
-                      Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF22C55E), shape: BoxShape.circle)),
-                      const SizedBox(width: 5),
-                      const Text('Percakapan aktif', style: TextStyle(fontSize: 10, color: Color(0xFF777493))),
-                    ]),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFEAE4F8)),
+            ),
+            child: Column(
+              children: [
+                TextField(
+                  controller: _searchController,
+                  onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
+                  decoration: InputDecoration(
+                    hintText: widget.isOrganizer
+                        ? 'Cari nama pengunjung atau nama UKM...'
+                        : 'Cari nama UKM atau isi pesan...',
+                    prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF777493), size: 20),
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                   ),
-                  Expanded(
-                    child: ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _sharedHistory.length,
-                      itemBuilder: (context, index) {
-                        final message = _sharedHistory[index];
-                        final mine = widget.isOrganizer ? message.sender == 'organizer' : message.sender == 'user';
-                        final isAi = message.sender == 'ai';
-                        return Align(
-                          alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-                          child: Container(
-                            constraints: BoxConstraints(maxWidth: isDesktop ? 520 : MediaQuery.sizeOf(context).width * .78),
-                            margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                            decoration: BoxDecoration(
-                              color: mine ? _purple : (isAi ? const Color(0xFFF3EEFF) : const Color(0xFFF1F5F9)),
-                              borderRadius: BorderRadius.only(
-                                topLeft: const Radius.circular(15), topRight: const Radius.circular(15),
-                                bottomLeft: Radius.circular(mine ? 15 : 4), bottomRight: Radius.circular(mine ? 4 : 15),
-                              ),
-                            ),
-                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              if (isAi || message.sender == 'organizer') ...[
-                                Text(isAi ? 'AI Assistant' : 'Organizer', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: mine ? Colors.white70 : _purple)),
-                                const SizedBox(height: 4),
-                              ],
-                              Text(message.text, style: TextStyle(fontSize: 13, height: 1.45, color: mine ? Colors.white : const Color(0xFF30264A))),
-                              const SizedBox(height: 5),
-                              Align(alignment: Alignment.bottomRight, child: Text(_formatTime(message.time), style: TextStyle(fontSize: 9, color: mine ? Colors.white60 : Colors.black45))),
-                            ]),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: ['Semua', 'Organizer', 'AI'].map((filter) {
+                    final active = _selectedFilter == filter;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(
+                          filter == 'Organizer' ? 'Butuh Organizer' : (filter == 'AI' ? 'AI Assistant' : 'Semua Room'),
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: active ? Colors.white : _purple,
                           ),
-                        );
-                      },
-                    ),
-                  ),
-                  if (!widget.isOrganizer && !_organizerRequested)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: const Color(0xFFFAF7FF), border: Border.all(color: const Color(0xFFE8DDFB)), borderRadius: BorderRadius.circular(14)),
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          const Text('Apakah jawaban ini membantu?', style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF30264A), fontSize: 12)),
-                          const SizedBox(height: 9),
-                          Wrap(spacing: 8, runSpacing: 8, children: [
-                            OutlinedButton.icon(onPressed: () => setState(() => _satisfied = true), icon: Icon(_satisfied ? Icons.check_circle : Icons.thumb_up_alt_outlined, size: 16), label: Text(_satisfied ? 'Terima kasih!' : 'Puas'), style: OutlinedButton.styleFrom(foregroundColor: _purple, side: const BorderSide(color: Color(0xFFD8C8F6))),),
-                            FilledButton.icon(onPressed: () => setState(() => _organizerRequested = true), icon: const Icon(Icons.support_agent_rounded, size: 17), label: const Text('Chat Organizer'), style: FilledButton.styleFrom(backgroundColor: _purple, foregroundColor: Colors.white)),
-                          ]),
-                          if (_organizerRequested) const Padding(padding: EdgeInsets.only(top: 8), child: Text('Permintaan diteruskan dalam percakapan ini. Organizer dapat membalas di sini.', style: TextStyle(fontSize: 11, color: Color(0xFF777493)))),
-                        ]),
-                      ),
-                    ),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-                    decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFFF0ECF7)))),
-                    child: Row(children: [
-                      Expanded(child: TextField(
-                        controller: _messageController,
-                        minLines: 1,
-                        maxLines: 4,
-                        onSubmitted: (_) => _sendMessage(),
-                        decoration: InputDecoration(
-                          hintText: widget.isOrganizer ? 'Balas pesan pengunjung...' : 'Tulis pesan tentang event atau booth...',
-                          filled: true, fillColor: const Color(0xFFF8FAFC), isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                         ),
-                      )),
-                      const SizedBox(width: 8),
-                      IconButton.filled(onPressed: _sendMessage, style: IconButton.styleFrom(backgroundColor: _accent, foregroundColor: Colors.white), icon: const Icon(Icons.send_rounded)),
-                    ]),
-                  ),
-                ],
-              ),
+                        selected: active,
+                        selectedColor: _purple,
+                        backgroundColor: const Color(0xFFF0E9FF),
+                        side: BorderSide.none,
+                        onSelected: (_) => setState(() => _selectedFilter = filter),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
-          const Text('Catatan: jawaban otomatis pada versi ini masih berupa bantuan lokal contoh. Konfirmasi harga, pembayaran, stok, dan pesanan tetap harus dilakukan oleh organizer/sistem.', style: TextStyle(fontSize: 10, color: Color(0xFF8A849F))),
+          const SizedBox(height: 14),
+          Expanded(
+            child: StreamBuilder<List<Map<String, dynamic>>>(
+              stream: Supabase.instance.client
+                  .from('conversations')
+                  .stream(primaryKey: ['id'])
+                  .order('last_message_at', ascending: false),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                var rooms = snapshot.data ?? [];
+
+                if (!widget.isOrganizer && currentUserId != null) {
+                  rooms = rooms.where((r) => r['client_id'] == currentUserId).toList();
+                }
+
+                if (_selectedFilter == 'Organizer') {
+                  rooms = rooms.where((r) => r['status'] == 'organizer').toList();
+                } else if (_selectedFilter == 'AI') {
+                  rooms = rooms.where((r) => r['status'] != 'organizer').toList();
+                }
+
+                if (_searchQuery.isNotEmpty) {
+                  rooms = rooms.where((r) {
+                    final name = (r['client_name'] ?? '').toString().toLowerCase();
+                    final topic = (r['topic'] ?? '').toString().toLowerCase();
+                    final lastMsg = (r['last_message'] ?? '').toString().toLowerCase();
+                    return name.contains(_searchQuery) || topic.contains(_searchQuery) || lastMsg.contains(_searchQuery);
+                  }).toList();
+                }
+
+                if (rooms.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: const BoxDecoration(color: Color(0xFFF0E9FF), shape: BoxShape.circle),
+                          child: const Icon(Icons.mark_chat_unread_outlined, color: _purple, size: 32),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          widget.isOrganizer
+                              ? 'Belum ada pesan masuk dari pengunjung.'
+                              : 'Belum ada percakapan dengan UKM.',
+                          style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF21163F), fontSize: 14),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          widget.isOrganizer
+                              ? 'Pesan dari pengunjung akan muncul otomatis di sini untuk Anda balas.'
+                              : 'Klik tombol "Pilih UKM" di pojok kanan atas untuk memulai chat.',
+                          style: const TextStyle(color: Color(0xFF777493), fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return ListView.separated(
+                  itemCount: rooms.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (context, index) {
+                    final room = rooms[index];
+                    final clientName = (room['client_name'] ?? 'Pengunjung').toString();
+                    final ukmTopic = (room['topic'] ?? 'UKM').toString();
+                    final lastMsg = (room['last_message'] ?? '').toString();
+                    final isNeedOrg = room['status'] == 'organizer';
+                    final unread = (room['unread_count'] ?? 0) as int;
+
+                    return Material(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(16),
+                        onTap: () => _openChatRoom(room),
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: (widget.isOrganizer && unread > 0) ? _accent : const Color(0xFFEAE4F8),
+                              width: (widget.isOrganizer && unread > 0) ? 1.5 : 1,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 24,
+                                backgroundColor: const Color(0xFFF0E9FF),
+                                child: Text(
+                                  widget.isOrganizer
+                                      ? (clientName.isNotEmpty ? clientName[0].toUpperCase() : 'U')
+                                      : (ukmTopic.isNotEmpty ? ukmTopic[0].toUpperCase() : 'U'),
+                                  style: const TextStyle(fontWeight: FontWeight.w900, color: _purple, fontSize: 16),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            widget.isOrganizer ? '$clientName • $ukmTopic' : ukmTopic,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 14,
+                                              color: Color(0xFF21163F),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          _formatRoomTime(room['last_message_at']?.toString()),
+                                          style: const TextStyle(fontSize: 11, color: Color(0xFF777493)),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 5),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            lastMsg,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 12.5,
+                                              color: (widget.isOrganizer && unread > 0)
+                                                  ? const Color(0xFF21163F)
+                                                  : const Color(0xFF777493),
+                                              fontWeight: (widget.isOrganizer && unread > 0)
+                                                  ? FontWeight.w700
+                                                  : FontWeight.normal,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: isNeedOrg ? const Color(0xFFFEF3C7) : const Color(0xFFEDE9FE),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Text(
+                                            isNeedOrg ? 'Organizer' : 'AI',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w800,
+                                              color: isNeedOrg ? const Color(0xFFB45309) : _purple,
+                                            ),
+                                          ),
+                                        ),
+                                        if (widget.isOrganizer && unread > 0) ...[
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                            decoration: const BoxDecoration(color: _accent, shape: BoxShape.circle),
+                                            child: Text(
+                                              '$unread',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _VocaChatMessage {
-  final String text;
-  final String sender; // user, ai, organizer
-  final DateTime time;
-  const _VocaChatMessage({required this.text, required this.sender, required this.time});
+// 2. RUANG OBROLAN TERPADU PER ROOM UKM
+class SharedMessagesScreen extends StatefulWidget {
+  final bool isOrganizer;
+  final VoidCallback? onBack;
+  final String conversationId;
+  final String roomTitle;
+
+  const SharedMessagesScreen({
+    super.key,
+    required this.isOrganizer,
+    this.onBack,
+    this.conversationId = '00000000-0000-0000-0000-000000000001',
+    this.roomTitle = 'Voca-TechXpo Support',
+  });
+
+  @override
+  State<SharedMessagesScreen> createState() => _SharedMessagesScreenState();
+}
+
+class _SharedMessagesScreenState extends State<SharedMessagesScreen> {
+  static const Color _purple = Color(0xFF581C87);
+  static const Color _accent = Color(0xFF8B5CF6);
+
+  final ChatService _chatService = ChatService();
+  final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+
+  bool _organizerRequested = false;
+  bool _satisfied = false;
+
+  Uint8List? _selectedImageBytes;
+  String? _selectedFileName;
+  bool _isUploading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkConversationStatus();
+    if (widget.isOrganizer) {
+      _chatService.markUserMessagesAsRead(widget.conversationId);
+    }
+  }
+
+  Future<void> _checkConversationStatus() async {
+    try {
+      final res = await Supabase.instance.client
+          .from('conversations')
+          .select('status')
+          .eq('id', widget.conversationId)
+          .maybeSingle();
+      if (res != null &&
+          (res['status'] == 'organizer' || res['status'] == 'human') &&
+          mounted) {
+        setState(() => _organizerRequested = true);
+      }
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: true,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        if (file.bytes != null) {
+          setState(() {
+            _selectedImageBytes = file.bytes;
+            _selectedFileName = file.name;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal memilih gambar: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
+  void _clearSelectedImage() {
+    setState(() {
+      _selectedImageBytes = null;
+      _selectedFileName = null;
+    });
+  }
+
+  Future<void> _sendMessage() async {
+    final text = _messageController.text.trim();
+    if ((text.isEmpty && _selectedImageBytes == null) || _isUploading) return;
+
+    final imageBytes = _selectedImageBytes;
+    final rawFileName = _selectedFileName ?? 'image.png';
+
+    _messageController.clear();
+    _clearSelectedImage();
+
+    String? uploadedImageUrl;
+
+    if (imageBytes != null) {
+      setState(() => _isUploading = true);
+      try {
+        final ext = rawFileName.contains('.') ? rawFileName.split('.').last.toLowerCase() : 'png';
+        final mimeType = ext == 'jpg' ? 'image/jpeg' : 'image/$ext';
+        final uniqueName = '${DateTime.now().millisecondsSinceEpoch}_${widget.isOrganizer ? 'org' : 'user'}.$ext';
+        final filePath = '${widget.conversationId}/$uniqueName';
+
+        await Supabase.instance.client.storage.from('chat_images').uploadBinary(
+              filePath,
+              imageBytes,
+              fileOptions: FileOptions(contentType: mimeType, upsert: true),
+            );
+
+        uploadedImageUrl = Supabase.instance.client.storage.from('chat_images').getPublicUrl(filePath);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Gagal mengunggah gambar: $e'), backgroundColor: Colors.redAccent),
+          );
+        }
+        setState(() => _isUploading = false);
+        return;
+      } finally {
+        if (mounted) setState(() => _isUploading = false);
+      }
+    }
+
+    await _chatService.sendMessage(
+      conversationId: widget.conversationId,
+      message: text,
+      senderType: widget.isOrganizer ? 'organizer' : 'user',
+      imageUrl: uploadedImageUrl,
+    );
+
+    _scrollToBottom();
+  }
+
+  Future<void> _connectToOrganizer() async {
+    setState(() {
+      _organizerRequested = true;
+    });
+    await _chatService.switchToOrganizer(widget.conversationId);
+    _scrollToBottom();
+  }
+
+  Future<void> _switchBackToAi() async {
+    setState(() {
+      _organizerRequested = false;
+      _satisfied = false;
+    });
+    await Supabase.instance.client
+        .from('conversations')
+        .update({'status': 'ai'})
+        .eq('id', widget.conversationId);
+    _scrollToBottom();
+  }
+
+  void _scrollToBottom() {
+    Future.delayed(const Duration(milliseconds: 250), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  String _formatTime(DateTime dt) {
+    final local = dt.toLocal();
+    return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDesktop = MediaQuery.sizeOf(context).width > 760;
+
+    return Container(
+      color: const Color(0xFFF8FAFC),
+      padding: EdgeInsets.all(isDesktop ? 24 : 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Material(
+                color: Colors.white,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: widget.onBack ?? () => Navigator.of(context).maybePop(),
+                  child: Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: const Color(0xFFE6DDF8)),
+                    ),
+                    child: const Icon(Icons.arrow_back_rounded, color: _purple, size: 23),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0E9FF),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.forum_rounded, color: _purple, size: 25),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.roomTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 21,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF21163F),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    const Text(
+                      'Satu ruang percakapan untuk bantuan AI dan komunikasi dengan organizer.',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF777493)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFFEAE4F8)),
+              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                    child: Row(
+                      children: [
+                        const CircleAvatar(
+                          radius: 20,
+                          backgroundColor: Color(0xFFF0E9FF),
+                          child: Icon(Icons.support_agent_rounded, color: _purple, size: 22),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Voca-TechXpo Support',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
+                                  color: Color(0xFF21163F),
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'AI Assistant • Organizer',
+                                style: TextStyle(fontSize: 11.5, color: Color(0xFF777493)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF22C55E),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            const Text(
+                              'Percakapan aktif',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1, color: Color(0xFFF0ECF7)),
+                  Expanded(
+                    child: StreamBuilder<List<ChatMessage>>(
+                      stream: _chatService.streamMessages(widget.conversationId),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(child: CircularProgressIndicator(color: _purple));
+                        }
+
+                        final messages = snapshot.data ?? [];
+
+                        // Jika Admin sedang membuka room dan ada pesan baru dari client, tandai sudah dilihat
+                        if (widget.isOrganizer &&
+                            messages.any((m) => m.senderType == 'user' && !m.isRead)) {
+                          _chatService.markUserMessagesAsRead(widget.conversationId);
+                        }
+
+                        if (messages.isEmpty) {
+                          return Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Text(
+                                widget.isOrganizer
+                                    ? 'Belum ada pesan pada percakapan ini.'
+                                    : 'Halo! Tanyakan apa saja seputar event, jadwal, atau booth kepada AI Assistant kami.',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(fontSize: 13, color: Color(0xFF777493)),
+                              ),
+                            ),
+                          );
+                        }
+
+                        return ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                          itemCount: messages.length,
+                          itemBuilder: (context, index) {
+                            final msg = messages[index];
+                            final isUser = msg.senderType == 'user';
+                            final isOrganizerMsg = msg.senderType == 'organizer';
+                            final isMe = widget.isOrganizer ? isOrganizerMsg : isUser;
+
+                            // Cek apakah pesan dikirim Client pada sesi Organizer (bukan sesi AI)
+                            int lastTakeover = -1;
+                            int lastReturnAi = -1;
+                            for (int i = 0; i < index; i++) {
+                              if (messages[i].senderType == 'bot') {
+                                if (messages[i].message.contains('dialihkan ke Organizer')) {
+                                  lastTakeover = i;
+                                } else if (messages[i].message.contains('dikembalikan ke Voca-Bot AI')) {
+                                  lastReturnAi = i;
+                                }
+                              }
+                            }
+
+                            final isOrganizerChatMsg = isUser &&
+                                (lastTakeover > lastReturnAi ||
+                                    (lastTakeover == -1 && lastReturnAi == -1 && _organizerRequested));
+
+                            final hasOrganizerReplyAfter = messages
+                                .sublist(index + 1)
+                                .any((m) => m.senderType == 'organizer');
+
+                            final isSeenOrReplied = msg.isRead || hasOrganizerReplyAfter;
+
+                            return Align(
+                              alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                              child: Container(
+                                constraints: BoxConstraints(
+                                  maxWidth: MediaQuery.sizeOf(context).width * (isDesktop ? 0.55 : 0.78),
+                                ),
+                                margin: const EdgeInsets.only(bottom: 10),
+                                padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
+                                decoration: BoxDecoration(
+                                  color: isMe
+                                      ? _purple
+                                      : (isOrganizerMsg
+                                          ? const Color(0xFFEDE9FE)
+                                          : const Color(0xFFF8FAFC)),
+                                  borderRadius: BorderRadius.only(
+                                    topLeft: const Radius.circular(16),
+                                    topRight: const Radius.circular(16),
+                                    bottomLeft: Radius.circular(isMe ? 16 : 4),
+                                    bottomRight: Radius.circular(isMe ? 4 : 16),
+                                  ),
+                                  border: isMe
+                                      ? null
+                                      : Border.all(
+                                          color: isOrganizerMsg
+                                              ? const Color(0xFFDDD6FE)
+                                              : const Color(0xFFEAE4F8),
+                                        ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                                  children: [
+                                    if (!isMe) ...[
+                                      Text(
+                                        isOrganizerMsg
+                                            ? 'Organizer'
+                                            : (isUser ? 'Pengunjung' : 'Voca-Bot AI'),
+                                        style: const TextStyle(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w800,
+                                          color: _purple,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                    ],
+                                    if (msg.imageUrl != null && msg.imageUrl!.isNotEmpty) ...[
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: Image.network(
+                                          msg.imageUrl!,
+                                          height: 180,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) => const Padding(
+                                            padding: EdgeInsets.all(8.0),
+                                            child: Text(
+                                              '[Gambar tidak dapat dimuat]',
+                                              style: TextStyle(fontSize: 12, color: Colors.grey),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      if (msg.message.isNotEmpty) const SizedBox(height: 8),
+                                    ],
+                                    if (msg.message.isNotEmpty)
+                                      Text(
+                                        msg.message,
+                                        style: TextStyle(
+                                          fontSize: 13.5,
+                                          height: 1.4,
+                                          color: isMe ? Colors.white : const Color(0xFF21163F),
+                                        ),
+                                      ),
+                                    const SizedBox(height: 5),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          _formatTime(msg.createdAt),
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: isMe ? Colors.white70 : const Color(0xFF777493),
+                                          ),
+                                        ),
+                                        if (isOrganizerChatMsg) ...[
+                                          const SizedBox(width: 4),
+                                          Icon(
+                                            isSeenOrReplied
+                                                ? Icons.done_all_rounded
+                                                : Icons.check_rounded,
+                                            size: 15,
+                                            color: isSeenOrReplied
+                                                ? const Color(0xFF38BDF8) // Centang 2 biru
+                                                : (isMe ? Colors.white70 : const Color(0xFF777493)), // Centang 1
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                  if (!widget.isOrganizer && !_organizerRequested && !_satisfied)
+                    Container(
+                      margin: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFAF8FF),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFEAE4F8)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Apakah jawaban ini membantu?',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF21163F),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 8,
+                            children: [
+                              OutlinedButton.icon(
+                                onPressed: () {
+                                  setState(() => _satisfied = true);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Terima kasih! Senang jawaban AI membantu.'),
+                                      duration: Duration(seconds: 2),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.thumb_up_outlined, size: 16),
+                                label: const Text('Puas', style: TextStyle(fontWeight: FontWeight.w700)),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: _purple,
+                                  side: const BorderSide(color: Color(0xFFD8B4FE)),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                ),
+                              ),
+                              FilledButton.icon(
+                                onPressed: _connectToOrganizer,
+                                icon: const Icon(Icons.support_agent_rounded, size: 17),
+                                label: const Text(
+                                  'Chat Organizer',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: _purple,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (!widget.isOrganizer && _organizerRequested)
+                    Container(
+                      margin: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFFDE68A)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.support_agent_rounded, size: 18, color: Color(0xFFB45309)),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'Terhubung dengan Organizer',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF92400E),
+                              ),
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: _switchBackToAi,
+                            icon: const Icon(Icons.smart_toy_outlined, size: 16),
+                            label: const Text(
+                              'Kembali ke AI',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                            ),
+                            style: TextButton.styleFrom(
+                              foregroundColor: _purple,
+                              backgroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (_selectedImageBytes != null)
+                    Container(
+                      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0E9FF),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.memory(
+                              _selectedImageBytes!,
+                              width: 48,
+                              height: 48,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _selectedFileName ?? 'Gambar terpilih',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF21163F),
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: _clearSelectedImage,
+                            icon: const Icon(Icons.close_rounded, size: 18, color: _purple),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const Divider(height: 1, color: Color(0xFFF0ECF7)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          onPressed: _isUploading ? null : _pickImage,
+                          tooltip: 'Lampirkan gambar / bukti transfer',
+                          style: IconButton.styleFrom(
+                            backgroundColor: const Color(0xFFF0E9FF),
+                            foregroundColor: _purple,
+                          ),
+                          icon: const Icon(Icons.add_photo_alternate_rounded, size: 21),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: _messageController,
+                            onSubmitted: (_) => _sendMessage(),
+                            decoration: InputDecoration(
+                              hintText: widget.isOrganizer
+                                  ? 'Tulis balasan untuk pengunjung...'
+                                  : 'Tulis pesan tentang event atau booth...',
+                              hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
+                              filled: true,
+                              fillColor: const Color(0xFFF1F5F9),
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        CircleAvatar(
+                          radius: 21,
+                          backgroundColor: _accent,
+                          child: IconButton(
+                            onPressed: _isUploading ? null : _sendMessage,
+                            icon: _isUploading
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(Icons.send_rounded, color: Colors.white, size: 19),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Terhubung secara real-time dengan Supabase & Groq AI.',
+            style: TextStyle(fontSize: 11, color: Color(0xFF777493)),
+          ),
+        ],
+      ),
+    );
+  }
 }
